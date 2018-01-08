@@ -38,6 +38,11 @@ var LOWEST_KNOB = 17;
 var HIGHEST_KNOB = 24;
 
 var isShift = false;
+var ON_OFF_MESSAGES = ['OFF', 'ON'];
+var MUTE_MESSAGES = ['MUTED', 'LOUD'];
+var BUTTON_MESSAGE_MAP = [ON_OFF_MESSAGES, MUTE_MESSAGES];
+
+var noteIn;
 
 function init()
 {
@@ -48,6 +53,7 @@ function init()
 
 	// Keyboard
 	noteIn = host.getMidiInPort(0).createNoteInput("Oxygen 88 Keyboard");
+	noteIn.setShouldConsumeEvents(false);
 	
 	// Master track
 	masterTrack = host.createMasterTrack(0);
@@ -71,9 +77,15 @@ function init()
 	{
 		var bankTrack = trackBank.getChannel(i);
 		bankTrack.name().markInterested();
-		bankTrack.getArm().markInterested();
+		bankTrack.isActivated().markInterested();
+		bankTrack.getMute().markInterested();
 	}
 
+}
+
+function idx(b) 
+{
+	return 0 + b;
 }
 
 function onMidi(status, data1, data2)
@@ -131,26 +143,32 @@ function onMidi(status, data1, data2)
 			//Handle arm buttons
 			else if (data1 >= LOWEST_ARM && data1 <= HIGHEST_ARM && data2 > 0) 
 			{
-				var armTrack = trackBank.getChannel(data1 - LOWEST_ARM);
-				var armObject = armTrack.getArm();
-				var newArmValue = !armObject.get();
-				armObject.set(newArmValue);
-				host.showPopupNotification('Track: ' + armTrack.name().get() + (newArmValue ? ' is ARMED!.' : ' OFF'));
+				var currentTrack = trackBank.getChannel(data1 - LOWEST_ARM);
+				var currentTrackValueHolder = isShift
+					? currentTrack.getMute()
+					: currentTrack.isActivated();
+				var newValue = !currentTrackValueHolder.get();
+				var isOn = isShift != newValue; //logical XOR
+				if (!isOn) {
+					noteIn.sendRawMidiEvent(176, 64, 0); //send sustain off
+				}
+				currentTrackValueHolder.set(newValue);
+				host.showPopupNotification(currentTrack.name().get() + ' ' + BUTTON_MESSAGE_MAP[idx(isShift)][idx(isOn)]);
 			}
-			//Handle shift buttons
+			//Handle shift button
 			else if (data1 == SHIFT_BUTTON && data2 > 0) 
 			{
 				isShift = !isShift;
-				host.showPopupNotification('Shift ' + (isShift ? 'ON' : 'OFF') + ' (not implemented yet)');
+				host.showPopupNotification('Shift ' + ON_OFF_MESSAGES[idx(isShift)]);
 			}
 			else
 			{
 				// Handle knobs
 				if (data1 >= LOWEST_KNOB && data1 <= HIGHEST_KNOB)
 				{
-					var knob_index = data1 - LOWEST_KNOB;
-					knob_param = remoteControls.getParameter(knob_index);
-					knob_param.getAmount().set(data2, 128);
+					var knobIndex = data1 - LOWEST_KNOB;
+					knobParameter = remoteControls.getParameter(knobIndex);
+					knobParameter.getAmount().set(data2, 128);
 				}
 			}
 		}
