@@ -44,6 +44,10 @@ var BUTTON_MESSAGE_MAP = [ON_OFF_MESSAGES, MUTE_MESSAGES];
 
 var noteIn;
 
+function cursorTrackNameObserver(n) {
+	host.showPopupNotification('Current track: ' + n);
+}
+
 function init()
 {
 	transport = host.createTransport();
@@ -60,7 +64,7 @@ function init()
 	
 	// The cursor
 	cursorTrack = host.createCursorTrack(0, 0);
-	cursorTrack.name().markInterested();	
+	cursorTrack.name().addValueObserver(cursorTrackNameObserver);
 	cursorDevice = cursorTrack.createCursorDevice();	
 	
 	// Knobs 
@@ -73,6 +77,7 @@ function init()
 	//Pageable tracks
 	trackBank = host.createMainTrackBank(8, 0, 0);
 	trackBank.followCursorTrack(cursorTrack);
+	
 	for (var i = 0; i < 8; i++)
 	{
 		var bankTrack = trackBank.getChannel(i);
@@ -82,6 +87,7 @@ function init()
 	}
 
 }
+
 
 function idx(b) 
 {
@@ -101,11 +107,9 @@ function onMidi(status, data1, data2)
 			switch(data1) {
 				case TRANS.PREV_TRACK:
 				cursorTrack.selectPrevious();
-				host.showPopupNotification('Current track: ' + cursorTrack.name().get());
 				break;
 			case TRANS.NEXT_TRACK:
 				cursorTrack.selectNext();
-				host.showPopupNotification('Current track: ' + cursorTrack.name().get());
 				break;
 			case TRANS.LOOP:
 				transport.toggleLoop();
@@ -123,7 +127,6 @@ function onMidi(status, data1, data2)
 				transport.play();
 				break;
 			case TRANS.RECORD:
-				//cursorTrack.getArm().toggle();
 				transport.record();
 				break;
 			}
