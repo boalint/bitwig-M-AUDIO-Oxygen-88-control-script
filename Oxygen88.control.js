@@ -110,7 +110,7 @@ function init()
     }
 
     //Pageable tracks
-    trackBank = host.createMainTrackBank(FADER.COUNT, 0, 0);
+    trackBank = host.createTrackBank(FADER.COUNT, 0, 0, false);
     trackBank.followCursorTrack(cursorTrack);
 
     for (var i = 0; i < FADER.COUNT; i++) {
@@ -121,6 +121,7 @@ function init()
         bankTrack.position().markInterested();
     }
 
+    rootTrackGroup = host.getProject().getRootTrackGroup();
 }
 
 function onMidi(status, data1, data2) {
@@ -130,7 +131,7 @@ function onMidi(status, data1, data2) {
     {
 
         // Handle transport-buttons and track selection
-        if ((isIn(data1, TRANSPORT.PREV_TRACK, TRANSPORT.RECORD) 
+        if ((isIn(data1, TRANSPORT.PREV_TRACK, TRANSPORT.RECORD)
             && data1 != 112) //112 is skipped in transport messages
             && data2 > 0) {
 
@@ -142,7 +143,11 @@ function onMidi(status, data1, data2) {
                     cursorTrack.selectNext();
                     break;
                 case TRANSPORT.LOOP:
-                    transport.toggleLoop();
+                    if (isShift) {
+                        transport.tapTempo();
+                    } else {
+                        transport.toggleLoop();
+                    }
                     break;
                 case TRANSPORT.REWIND:
                     transport.rewind();
@@ -161,7 +166,7 @@ function onMidi(status, data1, data2) {
                     break;
             }
 
-        // Handle fader for track volume    
+        // Handle fader for track volume
         } else if (isIn(data1, FADER.LOW, FADER.HIGH)) {
             if (isShift) {
                 //drawbar mode
@@ -198,7 +203,7 @@ function onMidi(status, data1, data2) {
                 + (currentTrack.position().get() + 1)
                 + '] '
                 + currentTrack.name().get() 
-                + ' ' 
+                + ' '
                 + BUTTON_MESSAGE_MAP[~~isShift][~~isOn] 
                 );
         }
