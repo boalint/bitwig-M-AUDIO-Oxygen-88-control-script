@@ -65,14 +65,17 @@ const MESSAGES = {
 const BUTTON_MESSAGE_MAP = [MESSAGES.ON_OFF, MESSAGES.MUTE];
 
 const D2 = 128;
-const S_CC_UNDEFINED = 176;
+const S_CC_START = 176;
+const S_PITCH_BEND_START = 224;
+
+const MAX_CHANNEL = 14; //Channel 16 (15) is used for knobs, transport buttons, track navigation, etc
 
 const CC_BREATH = 2;
 const CC_EXPRESSION = 11;
 const CC_SUSTAIN = 64;
 
 var isShift = false;
-var noteIn;
+var noteIns = [];
 var cursorTrack;
 
 function cursorTrackPositionObserver(pos) {
@@ -86,12 +89,18 @@ function init()
 {
     transport = host.createTransport();
 
+    midiPort = host.getMidiInPort(0);
+    
     // Register callback for midi-events
-    host.getMidiInPort(0).setMidiCallback(onMidi);
+    midiPort.setMidiCallback(onMidi);
 
-    // Keyboard
-    noteIn = host.getMidiInPort(0).createNoteInput(OXYGEN_88.NAME + ' Keyboard');
-    noteIn.setShouldConsumeEvents(false);
+    // Keyboard (per channel)
+    noteIns.push(midiPort.createNoteInput('Omni', '??????'));
+    noteIns[0].setShouldConsumeEvents(false);
+    for (var i = 1; i <= 16; i++ ) {
+        noteIns.push(midiPort.createNoteInput('CH ' + i, '?' + (i-1) + '????'));
+        noteIns[i].setShouldConsumeEvents(false);
+    }
 
     // Master track
     masterTrack = host.createMasterTrack(0);
@@ -127,8 +136,7 @@ function init()
 function onMidi(status, data1, data2) {
     printMidi(status, data1, data2);
 
-    if (isChannelController(status))
-    {
+    if (isChannelController(status)) {
 
         // Handle transport-buttons and track selection
         if ((isIn(data1, TRANSPORT.PREV_TRACK, TRANSPORT.RECORD)
@@ -180,7 +188,7 @@ function onMidi(status, data1, data2) {
         else if (data1 == FADER.MASTER) {
             if (isShift) {
                 //drawbar mode
-                noteIn.sendRawMidiEvent(status, data1, 127-data2);
+                sendMidiToAll(status, data1, 127-data2);
             } else {
                 masterTrack.getVolume().set(data2, D2);
             }
@@ -195,16 +203,16 @@ function onMidi(status, data1, data2) {
             var newValue = !currentTrackValueHolder.get();
             var isOn = isShift != newValue; //logical XOR
             if (!isOn) {
-                noteIn.sendRawMidiEvent(S_CC_UNDEFINED, CC_SUSTAIN, 0); //send sustain off
+                sendMidiToAll(S_CC_START, CC_SUSTAIN, 0); //send sustain off
             }
             currentTrackValueHolder.set(newValue);
             host.showPopupNotification(
                 '['
                 + (currentTrack.position().get() + 1)
                 + '] '
-                + currentTrack.name().get() 
+                + currentTrack.name().get()
                 + ' '
-                + BUTTON_MESSAGE_MAP[~~isShift][~~isOn] 
+                + BUTTON_MESSAGE_MAP[~~isShift][~~isOn]
                 );
         }
 
@@ -220,12 +228,26 @@ function onMidi(status, data1, data2) {
             knobParameter = remoteControls.getParameter(knobIndex);
             knobParameter.getAmount().set(data2, D2);
         }
-        
-        //Map Expression to Breath controller, as bitwig somehow gulps Expression messages
-        else if (status == S_CC_UNDEFINED && data1 == CC_EXPRESSION) {
-            noteIn.sendRawMidiEvent(status, 2, data2);
+
+        //clone Channel 1 CC-s to other Channels
+        else if (status == S_CC_START) {
+
+            //Map Expression to Breath controller, as bitwig somehow gulps Expression messages
+            if (data1 == CC_EXPRESSION) {
+                sendMidiToAll(status, 2, data2);
+            }
+            
+            //Other CC
+            else {
+                cloneMsgToOtherCh(S_CC_START, data1, data2);
+            }
         }
+
+    }
     
+    //clone Channel 1 Pitch Bend to other Channels
+    else if (status == S_PITCH_BEND_START) {
+        cloneMsgToOtherCh(S_PITCH_BEND_START, data1, data2);
     }
 }
 
@@ -233,6 +255,17 @@ function isIn(value, low, high) {
     return value >= low && value <= high;
 }
 
-function exit()
-{
+function sendMidiToAll(status, data1, data2) {
+    for (var i = 0; i < MAX_CHANNEL; i++) {
+        noteIns[i].sendRawMidiEvent(status, data1, data2);
+    }
+}
+
+function cloneMsgToOtherCh(statusStart, data1, data2) {
+    for (var i = 2; i < MAX_CHANNEL; i++) {
+        noteIns[i].sendRawMidiEvent(statusStart + i - 1, data1, data2);
+    }
+}
+
+function exit() {
 }
